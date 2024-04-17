@@ -48,8 +48,8 @@ public class HomeAction implements Action, SessionAware, ServletResponseAware, S
     public String execute() {
 
         servletRequest.setAttribute("isSaas", InitializerListener.isSaas);
-        if (GithubLogin.getClientId() != null) {
-            servletRequest.setAttribute("githubClientId", new String(Base64.getEncoder().encode(GithubLogin.getClientId().getBytes())));
+        if (GithubLogin.getAuthorisationUrl() != null) {
+            servletRequest.setAttribute("githubAuthUrl", new String(Base64.getEncoder().encode(GithubLogin.getAuthorisationUrl().getBytes())));
         }
         if(OktaLogin.getAuthorisationUrl() != null){
             servletRequest.setAttribute("oktaAuthUrl", new String(Base64.getEncoder().encode(OktaLogin.getAuthorisationUrl().getBytes())));

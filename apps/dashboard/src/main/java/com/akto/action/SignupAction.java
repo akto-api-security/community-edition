@@ -82,6 +82,7 @@ public class SignupAction implements Action, ServletResponseAware, ServletReques
     public static final String BUSINESS_EMAIL_REQUIRED_ERROR = "BUSINESS_EMAIL_REQUIRED";
     public static final String ERROR_STR = "error";
     public static final String ERROR_DESCRIPTION = "error_description";
+    public static final String GET_GITHUB_EMAILS_URL = "https://api.github.com/user/emails";
     private static final Logger logger = LoggerFactory.getLogger(ProfileAction.class);
     private static final LoggerMaker loggerMaker = new LoggerMaker(SignupAction.class);
 
@@ -429,7 +430,20 @@ public class SignupAction implements Action, ServletResponseAware, ServletReques
         return SUCCESS.toUpperCase();
     }
 
-    public String registerViaGithub() {
+    private static String getPrimaryEmail(List<Map<String, String>> emailResp){
+        if(emailResp == null){
+            return  "";
+        }else{
+            for (Map<String, String> entryMap : emailResp) {
+                if(entryMap.get("primary").equals("true")){
+                    return entryMap.get("email");
+                }
+            }
+        }
+        return null;
+    }
+
+    public String registerViaGithub() throws IOException{
         if (!DashboardMode.isOnPremDeployment()) return Action.ERROR.toUpperCase();
         GithubLogin ghLoginInstance = GithubLogin.getInstance();
         if (ghLoginInstance == null) {
@@ -449,15 +463,19 @@ public class SignupAction implements Action, ServletResponseAware, ServletReques
             String refreshToken = tokenData.getOrDefault("refresh_token", "").toString();
             int refreshTokenExpiry = Integer.parseInt(tokenData.getOrDefault("refresh_token_expires_in", "0").toString());
             Map<String,Object> userData = CustomHttpRequest.getRequest("https://api.github.com/user", "Bearer " + accessToken);
-            String company = "sso";
-            String username = userData.get("login").toString() + "@" + company;
-            SignupInfo.GithubSignupInfo ghSignupInfo = new SignupInfo.GithubSignupInfo(accessToken, refreshToken, refreshTokenExpiry, username);
+            List<Map<String, String>> emailResp = GithubLogin.getEmailRequest(GET_GITHUB_EMAILS_URL, accessToken);
+
+            String primaryEmail = getPrimaryEmail(emailResp);
+
+            String username = userData.get("login").toString() ;
+            SignupInfo.GithubSignupInfo ghSignupInfo = new SignupInfo.GithubSignupInfo(accessToken, refreshToken, refreshTokenExpiry, username, primaryEmail);
             shouldLogin = "true";
-            createUserAndRedirect(username, username, ghSignupInfo, 1000000, Config.ConfigType.GITHUB.toString());
+            createUserAndRedirect(primaryEmail, username, ghSignupInfo, 1000000, Config.ConfigType.GITHUB.toString());
             code = "";
             logger.info("Executed registerViaGithub");
 
         } catch (IOException e) {
+            servletResponse.sendRedirect("/login");
             return ERROR.toUpperCase();
         }
         return SUCCESS.toUpperCase();
