@@ -47,6 +47,7 @@ function TrendChart(props) {
         let retH = []
         let retM = []
         let retL = []
+        let retC = []
 
         let items = data;
 
@@ -65,6 +66,7 @@ function TrendChart(props) {
             let ts = x["startTimestamp"] * 1000
             let countIssuesMap = x["countIssues"]
             if(countIssuesMap && Object.keys(countIssuesMap).length > 0){
+                retC.push([ts],countIssuesMap["CRITICAL"])
                 retH.push([ts, countIssuesMap["HIGH"]])
                 retM.push([ts, countIssuesMap["MEDIUM"]])
                 retL.push([ts, countIssuesMap["LOW"]])
@@ -72,6 +74,11 @@ function TrendChart(props) {
         })
 
         return [
+            {
+                data: retC,
+                color: "var(--p-color-bg-critical-strong)",
+                name: "Critical"
+            },
             {
                 data: retH,
                 color: "var(--p-color-bg-critical-strong)",
@@ -145,8 +152,8 @@ function TrendChart(props) {
 
             let count = 0
             testingRunResultSummaries.forEach((ele)=>{
-                let obj = (ele?.countIssues && Object.keys(ele.countIssues).length > 0) ? ele.countIssues : {HIGH: 0, MEDIUM: 0, LOW: 0}
-                count += (obj.HIGH + obj.MEDIUM + obj.LOW)
+                let obj = (ele?.countIssues && Object.keys(ele.countIssues).length > 0) ? ele.countIssues : { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0}
+                count += (obj.CRITICAL, obj.HIGH + obj.MEDIUM + obj.LOW)
             })
 
             setTotalVulnerabilites(count)

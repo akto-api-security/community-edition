@@ -259,10 +259,11 @@ prettifyEpoch(epoch) {
   },
   getTestResultStatus(item) {
     let localItem = item.toUpperCase();
+    if(localItem.includes("CRITICAL")) return 'critical-strong-experimental';
     if(localItem.includes("HIGH")) return 'critical';
     if(localItem.includes("MEDIUM")) return 'warning';
-    if(localItem.includes("LOW")) return 'neutral';
-    if(localItem.includes("CWE") || localItem.startsWith("+")) return 'info'
+    if(localItem.includes("LOW")) return 'info';
+    if(localItem.includes("CWE") || localItem.startsWith("+")) return 'neutral'
     if(localItem.includes("UNREAD") || localItem.startsWith("+")) return 'attention';
     return "";
   },
@@ -1222,6 +1223,8 @@ mapCollectionIdToHostName(apiCollections){
   },
   getHexColorForSeverity(key){
     switch(key){
+      case "CRITICAL":
+        return "#D72C0D"
       case "HIGH":
         return "#D72C0D"
       case "MEDIUM":
@@ -1236,8 +1239,10 @@ mapCollectionIdToHostName(apiCollections){
 
   getColorForCharts(key){
     switch(key){
-      case "HIGH":
+      case "CRITICAL":
         return tokens.color["color-icon-critical"]
+      case "HIGH":
+        return "#fbc5bc"
       case "MEDIUM":
         return tokens.color["color-icon-warning"]
       case "LOW":

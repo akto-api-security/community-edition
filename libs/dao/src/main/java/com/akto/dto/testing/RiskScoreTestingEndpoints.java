@@ -115,6 +115,7 @@ public class RiskScoreTestingEndpoints extends TestingEndpoints {
         } else if (riskScore >= 4f && riskScore <= 5f) {
             return RiskScoreGroupType.HIGH;
         }
+
         
         throw new IllegalArgumentException("Risk score is out of expected range: " + riskScore);
     }
