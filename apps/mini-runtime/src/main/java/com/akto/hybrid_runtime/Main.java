@@ -1,5 +1,10 @@
 package com.akto.hybrid_runtime;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -23,6 +28,8 @@ import com.akto.data_actor.DataActor;
 import com.akto.data_actor.DataActorFactory;
 import com.akto.util.DashboardMode;
 import com.google.gson.Gson;
+import com.mongodb.BasicDBObject;
+
 import org.apache.kafka.clients.consumer.*;
 import org.apache.kafka.common.Metric;
 import org.apache.kafka.common.MetricName;
@@ -109,6 +116,41 @@ public class Main {
         }
     }
 
+    private static String insertCredsRecordInKafka(String brokerUrl) {
+        File f = new File("creds.txt");
+        String instanceId = UUID.randomUUID().toString();
+        if (f.exists()) {
+            try (FileReader reader = new FileReader(f);
+                 BufferedReader bufferedReader = new BufferedReader(reader)) {
+                String line;
+                while ((line = bufferedReader.readLine()) != null) {
+                    instanceId = line;
+                }
+            } catch (IOException e) {
+                loggerMaker.errorAndAddToDb("Error reading instanceId from file: " + e.getMessage());
+            }
+        } else {
+            try (FileWriter writer = new FileWriter(f)) {
+                writer.write(instanceId);
+            } catch (IOException e) {
+                loggerMaker.errorAndAddToDb("Error writing instanceId to file: " + e.getMessage());
+            }
+        }
+        int batchSize = Integer.parseInt(System.getenv("AKTO_TRAFFIC_BATCH_SIZE"));
+        int kafkaLingerMS = Integer.parseInt(System.getenv("AKTO_TRAFFIC_BATCH_TIME_SECS"));
+        kafkaProducer = new Kafka(brokerUrl, kafkaLingerMS, batchSize);
+        BasicDBObject creds = new BasicDBObject();
+        creds.put("id", instanceId);
+        creds.put("token", System.getenv("DATABASE_ABSTRACTOR_SERVICE_TOKEN"));
+        creds.put("url", System.getenv("DATABASE_ABSTRACTOR_SERVICE_URL"));
+        try {
+            kafkaProducer.send(creds.toJson(), "credentials");
+        } catch (Exception e) {
+            loggerMaker.errorAndAddToDb("Error inserting creds record in kafka: " + e.getMessage());
+        }
+        return instanceId;
+    }
+
     public static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
     public static class AccountInfo {
@@ -171,6 +213,7 @@ public class Main {
             fetchAllSTI = false;
         }
         int maxPollRecordsConfig = Integer.parseInt(System.getenv("AKTO_KAFKA_MAX_POLL_RECORDS_CONFIG"));
+        String instanceId = insertCredsRecordInKafka(kafkaBrokerUrl);
 
         AccountSettings aSettings = dataActor.fetchAccountSettings();
         if (aSettings == null) {
@@ -188,7 +231,7 @@ public class Main {
 
         dataActor.modifyHybridSaasSetting(RuntimeMode.isHybridDeployment());
 
-        initializeRuntime();
+        initializeRuntime(instanceId);
 
         String centralKafkaTopicName = AccountSettings.DEFAULT_CENTRAL_KAFKA_TOPIC_NAME;
 
@@ -378,6 +421,17 @@ public class Main {
                         continue;
                     }
 
+                    if (UsageMetricUtils.checkActiveEndpointOverage(accountIdInt)) {
+                        int now = Context.now();
+                        int lastSent = logSentMap.getOrDefault(accountIdInt, 0);
+                        if (now - lastSent > LoggerMaker.LOG_SAVE_INTERVAL) {
+                            logSentMap.put(accountIdInt, now);
+                            loggerMaker.infoAndAddToDb("Active endpoint overage detected for account " + accountIdInt
+                                    + ". Ingestion stopped " + now, LogDb.RUNTIME);
+                        }
+                        continue;
+                    }
+
                     if (!httpCallParserMap.containsKey(accountId)) {
                         HttpCallParser parser = new HttpCallParser(
                                 apiConfig.getUserIdentifier(), apiConfig.getThreshold(), apiConfig.getSync_threshold_count(),
@@ -510,12 +564,20 @@ public class Main {
         }
     }
 
-    public static void initializeRuntime(){
+    public static void initializeRuntime(String instanceId){
 
         Account account = dataActor.fetchActiveAccount();
         Context.accountId.set(account.getId());
 
-        AllMetrics.instance.init();
+        String version = "";
+        RuntimeVersion runtimeVersion = new RuntimeVersion();
+        try {
+            version = runtimeVersion.updateVersion(AccountSettings.API_RUNTIME_VERSION, dataActor);
+        } catch (Exception e) {
+            loggerMaker.errorAndAddToDb("error while updating dashboard version: " + e.getMessage(), LogDb.RUNTIME);
+        }
+
+        AllMetrics.instance.init(instanceId, version);
         loggerMaker.infoAndAddToDb("All metrics initialized", LogDb.RUNTIME);
 
         Setup setup = dataActor.fetchSetup();
@@ -526,13 +588,6 @@ public class Main {
         }
 
         isOnprem = dashboardMode.equalsIgnoreCase(DashboardMode.ON_PREM.name());
-        
-        RuntimeVersion runtimeVersion = new RuntimeVersion();
-        try {
-            runtimeVersion.updateVersion(AccountSettings.API_RUNTIME_VERSION, dataActor);
-        } catch (Exception e) {
-            loggerMaker.errorAndAddToDb("error while updating dashboard version: " + e.getMessage(), LogDb.RUNTIME);
-        }
 
         initFromRuntime(account.getId());
         
