@@ -125,6 +125,8 @@ public class SignupAction implements Action, ServletResponseAware, ServletReques
                 .clientSecret(aktoSlackConfig.getClientSecret())
                 .redirectUri(aktoSlackConfig.getRedirect_url()).build();
 
+        String returnStatus;
+
         try {
             OAuthV2AccessResponse response = Slack.getInstance().methods().oauthV2Access(request);
             String error = response.getError();
@@ -196,12 +198,13 @@ public class SignupAction implements Action, ServletResponseAware, ServletReques
             code = e.getMessage();
         } finally {
             if (code.length() > 0) {
-                return Action.ERROR.toUpperCase();
+                returnStatus = Action.ERROR.toUpperCase();
             } else {
-                return Action.SUCCESS.toUpperCase();
+                returnStatus = Action.SUCCESS.toUpperCase();
             }
         }
 
+        return returnStatus;
     }
 
     private BasicDBObject getParsedState(){
